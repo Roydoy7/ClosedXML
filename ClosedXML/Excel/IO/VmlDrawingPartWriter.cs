@@ -11,6 +11,7 @@ using System;
 using System.IO;
 using System.Text;
 using System.Xml;
+using System.Diagnostics;
 
 namespace ClosedXML.Excel.IO
 {
@@ -24,6 +25,8 @@ namespace ClosedXML.Excel.IO
             {
                 XLWorkbook.CopyStream(stream, ms);
                 stream.Position = 0;
+                stream.SetLength(0);
+
                 var writer = new XmlTextWriter(stream, Encoding.UTF8);
 
                 writer.WriteStartElement("xml");
@@ -61,9 +64,15 @@ namespace ClosedXML.Excel.IO
                 if (ms.Length > 0)
                 {
                     ms.Position = 0;
-                    var xdoc = XDocumentExtensions.Load(ms);
-                    xdoc.Root.Elements().ForEach(e => writer.WriteRaw(e.ToString()));
-                    hasAnyVmlElements |= xdoc.Root.HasElements;
+
+                    using var reader = new StreamReader(ms);
+                    var content = reader.ReadToEnd();
+                    content = content.Replace("<br>", "<br/>");
+                    using var fixedMs = new MemoryStream(Encoding.UTF8.GetBytes(content));
+
+                    var xdoc = XDocumentExtensions.Load(fixedMs);
+                    xdoc.Root.Elements().ForEach(e => writer.WriteRaw(e.ToString().Replace("<br />", "<br>")));
+                    hasAnyVmlElements |= xdoc.Root.HasElements;                    
                 }
 
                 writer.WriteEndElement();

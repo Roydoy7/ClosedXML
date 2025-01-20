@@ -370,12 +370,15 @@ namespace ClosedXML.Excel
                     .Remove();
 
                 vmlStream.Position = 0;
+                vmlStream.SetLength(0);
 
                 using (var writer = new XmlTextWriter(vmlStream, Encoding.UTF8))
-                {
+                {                    
                     var contents = xdoc.ToString();
                     writer.WriteRaw(contents);
-                    vmlStream.SetLength(contents.Length);
+                    writer.Flush();
+
+                    //vmlStream.SetLength(contents.Length);                    
                 }
 
                 return xdoc.Root.HasElements;

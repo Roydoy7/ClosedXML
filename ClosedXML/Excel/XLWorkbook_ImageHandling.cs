@@ -4,6 +4,7 @@ using DocumentFormat.OpenXml;
 using DocumentFormat.OpenXml.Drawing.Spreadsheet;
 using DocumentFormat.OpenXml.Packaging;
 using System;
+using System.Collections.Generic;
 using System.Linq;
 
 using Xdr = DocumentFormat.OpenXml.Drawing.Spreadsheet;
@@ -12,13 +13,15 @@ namespace ClosedXML.Excel
 {
     public partial class XLWorkbook
     {
-        public static OpenXmlElement GetAnchorFromImageId(DrawingsPart drawingsPart, string relId)
+        public static OpenXmlElement GetAnchorFromImageId(DrawingsPart drawingsPart, string relId, string imageName)
         {
-            var matchingAnchor = drawingsPart.WorksheetDrawing
+            var matchingAnchors = drawingsPart.WorksheetDrawing
                 .Where(wsdr => wsdr.Descendants<Xdr.BlipFill>()
                     .Any(x => x?.Blip?.Embed?.Value.Equals(relId) ?? false)
                 );
-            return matchingAnchor.FirstOrDefault();
+
+            var matchingAnchor = matchingAnchors.Where(x => x.Descendants<Xdr.NonVisualDrawingProperties>().Any(x => x.Name == imageName)).FirstOrDefault();
+            return matchingAnchor;
         }
 
         public static OpenXmlElement GetAnchorFromImageIndex(WorksheetPart worksheetPart, Int32 index)
@@ -46,6 +49,15 @@ namespace ClosedXML.Excel
             return shape
                 .Descendants<Xdr.NonVisualDrawingProperties>()
                 .FirstOrDefault();
+        }
+
+        public static IEnumerable<GroupShape> GetGroupShapeFromAnchor(OpenXmlElement anchor)
+        {
+            if (!IsAllowedAnchor(anchor))
+                return null;
+
+            return anchor
+                .Descendants<GroupShape>();
         }
 
         public static String GetImageRelIdFromAnchor(OpenXmlElement anchor)

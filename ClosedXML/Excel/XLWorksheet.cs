@@ -60,6 +60,7 @@ namespace ClosedXML.Excel
             _rangeIndices = new List<IXLRangeIndex>();
 
             Pictures = new XLPictures(this);
+            GroupShapes = new XLGroupShapes(this);
             DefinedNames = new XLDefinedNames(this);
             SheetView = new XLSheetView(this);
             Tables = new XLTables();
@@ -1747,6 +1748,7 @@ namespace ClosedXML.Excel
         }
 
         public IXLPictures Pictures { get; private set; }
+        public IXLGroupShapes GroupShapes { get; set; }
 
         public Boolean IsPasswordProtected => Protection.IsPasswordProtected;
 
@@ -1790,6 +1792,11 @@ namespace ClosedXML.Excel
         public IXLPicture AddPicture(string imageFile, string name)
         {
             return Pictures.Add(imageFile, name);
+        }
+
+        public IXLGroupShape AddGroupShape(string name, int id)
+        {
+            return GroupShapes.AddGroupShape(name, id);
         }
 
         public override Boolean IsEntireRow()

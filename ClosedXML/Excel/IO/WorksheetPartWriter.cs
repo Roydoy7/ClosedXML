@@ -26,6 +26,7 @@ using System.Reflection;
 using System.Xml;
 using static ClosedXML.Excel.XLWorkbook;
 using static ClosedXML.Excel.IO.OpenXmlConst;
+using ClosedXML.Excel.Drawings;
 
 namespace ClosedXML.Excel.IO
 {
@@ -1329,6 +1330,11 @@ namespace ClosedXML.Excel.IO
                 AddPictureAnchor(worksheetPart, pic, context);
             }
 
+            foreach(var groupShape in xlWorksheet.GroupShapes)
+            {
+                AddGroupShapeAnchor(worksheetPart, groupShape, context);
+            }
+
             if (xlWorksheet.Pictures.Any())
                 RebaseNonVisualDrawingPropertiesIds(worksheetPart);
 
@@ -1498,6 +1504,8 @@ namespace ClosedXML.Excel.IO
             foreach (var (columnNumber, xlFilterColumn) in xlAutoFilter.Columns)
             {
                 var filterColumn = new FilterColumn { ColumnId = (UInt32)columnNumber - 1 };
+                if (xlFilterColumn.ShowButton.HasValue)
+                    filterColumn.ShowButton = xlFilterColumn.ShowButton.Value;
 
                 switch (xlFilterColumn.FilterType)
                 {
@@ -1575,7 +1583,7 @@ namespace ClosedXML.Excel.IO
                         break;
 
                     default:
-                        throw new NotSupportedException();
+                        break;
                 }
                 autoFilter.Append(filterColumn);
             }
@@ -1740,7 +1748,6 @@ namespace ClosedXML.Excel.IO
             if (!worksheetDrawing.NamespaceDeclarations.Any(nd => nd.Value.Equals("http://schemas.openxmlformats.org/officeDocument/2006/relationships")))
                 worksheetDrawing.AddNamespaceDeclaration("r", "http://schemas.openxmlformats.org/officeDocument/2006/relationships");
             /////////
-
             // Overwrite actual image binary data
             ImagePart imagePart;
             if (drawingsPart.HasPartWithId(pic.RelId))
@@ -1761,16 +1768,39 @@ namespace ClosedXML.Excel.IO
             /////////
 
             // Clear current anchors
-            var existingAnchor = GetAnchorFromImageId(drawingsPart, pic.RelId);
+            var existingAnchor = GetAnchorFromImageId(drawingsPart, pic.RelId, pic.Name);
 
             var wb = pic.Worksheet.Workbook;
             var extentsCx = ConvertToEnglishMetricUnits(pic.Width, wb.DpiX);
             var extentsCy = ConvertToEnglishMetricUnits(pic.Height, wb.DpiY);
 
+            var existingSpPr = existingAnchor?.Descendants<Xdr.ShapeProperties>().First();
+            var spPr = existingSpPr?.Clone() as Xdr.ShapeProperties ??
+                                new Xdr.ShapeProperties(
+                                    new Transform2D(
+                                        new Offset { X = 0, Y = 0 },
+                                        new Extents { Cx = extentsCx, Cy = extentsCy }
+                                    ),
+                                    new PresetGeometry { Preset = ShapeTypeValues.Rectangle }
+                                );
+
             var nvps = worksheetDrawing.Descendants<Xdr.NonVisualDrawingProperties>();
             var nvpId = nvps.Any() ?
                 (UInt32Value)worksheetDrawing.Descendants<Xdr.NonVisualDrawingProperties>().Max(p => p.Id.Value) + 1 :
                 1U;
+
+            var existingNvPicPr = existingAnchor?.Descendants<Xdr.NonVisualPictureProperties>().First();
+            var nvPicPr = existingNvPicPr?.Clone() as Xdr.NonVisualPictureProperties ??
+                new Xdr.NonVisualPictureProperties(
+                                new Xdr.NonVisualDrawingProperties { Id = nvpId, Name = pic.Name },
+                                new Xdr.NonVisualPictureDrawingProperties(new PictureLocks { NoChangeAspect = true })
+                            );
+
+            var existingBlipFill = existingAnchor?.Descendants<Xdr.BlipFill>().First();
+            var blipFill = existingBlipFill?.Clone() as Xdr.BlipFill ?? new Xdr.BlipFill(
+                                new Blip { Embed = drawingsPart.GetIdOfPart(imagePart), CompressionState = BlipCompressionValues.Print },
+                                new Stretch(new FillRectangle())
+                            );
 
             Xdr.FromMarker fMark;
             Xdr.ToMarker tMark;
@@ -1789,21 +1819,24 @@ namespace ClosedXML.Excel.IO
                             Cy = extentsCy
                         },
                         new Xdr.Picture(
-                            new Xdr.NonVisualPictureProperties(
-                                    new Xdr.NonVisualDrawingProperties { Id = nvpId, Name = pic.Name },
-                                    new Xdr.NonVisualPictureDrawingProperties(new PictureLocks { NoChangeAspect = true })
-                            ),
-                            new Xdr.BlipFill(
-                                new Blip { Embed = drawingsPart.GetIdOfPart(imagePart), CompressionState = BlipCompressionValues.Print },
-                                new Stretch(new FillRectangle())
-                            ),
-                            new Xdr.ShapeProperties(
-                                new Transform2D(
-                                    new Offset { X = 0, Y = 0 },
-                                    new Extents { Cx = extentsCx, Cy = extentsCy }
-                                ),
-                                new PresetGeometry { Preset = ShapeTypeValues.Rectangle }
-                            )
+                            nvPicPr,
+                            //new Xdr.NonVisualPictureProperties(
+                            //        new Xdr.NonVisualDrawingProperties { Id = nvpId, Name = pic.Name },
+                            //        new Xdr.NonVisualPictureDrawingProperties(new PictureLocks { NoChangeAspect = true })
+                            //),
+                            blipFill,
+                            //new Xdr.BlipFill(
+                            //    new Blip { Embed = drawingsPart.GetIdOfPart(imagePart), CompressionState = BlipCompressionValues.Print },
+                            //    new Stretch(new FillRectangle())
+                            //),
+                            spPr
+                            //new Xdr.ShapeProperties(
+                            //    new Transform2D(
+                            //        new Offset { X = 0, Y = 0 },
+                            //        new Extents { Cx = extentsCx, Cy = extentsCy }
+                            //    ),
+                            //    new PresetGeometry { Preset = ShapeTypeValues.Rectangle }
+                            //)
                         ),
                         new Xdr.ClientData()
                     );
@@ -1836,21 +1869,24 @@ namespace ClosedXML.Excel.IO
                         fMark,
                         tMark,
                         new Xdr.Picture(
-                            new Xdr.NonVisualPictureProperties(
-                                new Xdr.NonVisualDrawingProperties { Id = nvpId, Name = pic.Name },
-                                new Xdr.NonVisualPictureDrawingProperties(new PictureLocks { NoChangeAspect = true })
-                            ),
-                            new Xdr.BlipFill(
-                                new Blip { Embed = drawingsPart.GetIdOfPart(imagePart), CompressionState = BlipCompressionValues.Print },
-                                new Stretch(new FillRectangle())
-                            ),
-                            new Xdr.ShapeProperties(
-                                new Transform2D(
-                                    new Offset { X = 0, Y = 0 },
-                                    new Extents { Cx = extentsCx, Cy = extentsCy }
-                                ),
-                                new PresetGeometry { Preset = ShapeTypeValues.Rectangle }
-                            )
+                            nvPicPr,
+                            //new Xdr.NonVisualPictureProperties(
+                            //    new Xdr.NonVisualDrawingProperties { Id = nvpId, Name = pic.Name },
+                            //    new Xdr.NonVisualPictureDrawingProperties(new PictureLocks { NoChangeAspect = true })
+                            //),
+                            blipFill,
+                            //new Xdr.BlipFill(
+                            //    new Blip { Embed = drawingsPart.GetIdOfPart(imagePart), CompressionState = BlipCompressionValues.Print },
+                            //    new Stretch(new FillRectangle())
+                            //),
+                            spPr
+                            //new Xdr.ShapeProperties(
+                            //    new Transform2D(
+                            //        new Offset { X = 0, Y = 0 },
+                            //        new Extents { Cx = extentsCx, Cy = extentsCy }
+                            //    ),
+                            //    new PresetGeometry { Preset = ShapeTypeValues.Rectangle }
+                            //)
                         ),
                         new Xdr.ClientData()
                     );
@@ -1877,21 +1913,24 @@ namespace ClosedXML.Excel.IO
                             Cy = extentsCy
                         },
                         new Xdr.Picture(
-                            new Xdr.NonVisualPictureProperties(
-                                new Xdr.NonVisualDrawingProperties { Id = nvpId, Name = pic.Name },
-                                new Xdr.NonVisualPictureDrawingProperties(new PictureLocks { NoChangeAspect = true })
-                            ),
-                            new Xdr.BlipFill(
-                                new Blip { Embed = drawingsPart.GetIdOfPart(imagePart), CompressionState = BlipCompressionValues.Print },
-                                new Stretch(new FillRectangle())
-                            ),
-                            new Xdr.ShapeProperties(
-                                new Transform2D(
-                                    new Offset { X = 0, Y = 0 },
-                                    new Extents { Cx = extentsCx, Cy = extentsCy }
-                                ),
-                                new PresetGeometry { Preset = ShapeTypeValues.Rectangle }
-                            )
+                            nvPicPr,
+                            //new Xdr.NonVisualPictureProperties(
+                            //    new Xdr.NonVisualDrawingProperties { Id = nvpId, Name = pic.Name },
+                            //    new Xdr.NonVisualPictureDrawingProperties(new PictureLocks { NoChangeAspect = true })
+                            //),
+                            blipFill,
+                            //new Xdr.BlipFill(
+                            //    new Blip { Embed = drawingsPart.GetIdOfPart(imagePart), CompressionState = BlipCompressionValues.Print },
+                            //    new Stretch(new FillRectangle())
+                            //),
+                            spPr
+                            //new Xdr.ShapeProperties(
+                            //    new Transform2D(
+                            //        new Offset { X = 0, Y = 0 },
+                            //        new Extents { Cx = extentsCx, Cy = extentsCy }
+                            //    ),
+                            //    new PresetGeometry { Preset = ShapeTypeValues.Rectangle }
+                            //)
                         ),
                         new Xdr.ClientData()
                     );
@@ -1899,6 +1938,206 @@ namespace ClosedXML.Excel.IO
                     AttachAnchor(oneCellAnchor, existingAnchor);
                     break;
             }
+
+            void AttachAnchor(OpenXmlElement pictureAnchor, OpenXmlElement existingAnchor)
+            {
+                if (existingAnchor is not null)
+                {
+                    worksheetDrawing.ReplaceChild(pictureAnchor, existingAnchor);
+                }
+                else
+                {
+                    worksheetDrawing.Append(pictureAnchor);
+                }
+            }
+        }
+
+        private static void AddGroupShapeAnchor(WorksheetPart worksheetPart, Drawings.IXLGroupShape xlGroupShape, SaveContext context)
+        {
+            var group = xlGroupShape as Drawings.XLGroupShape;
+            var drawingsPart = worksheetPart.DrawingsPart ??
+                   worksheetPart.AddNewPart<DrawingsPart>(context.RelIdGenerator.GetNext(RelType.Workbook));
+
+            if (drawingsPart.WorksheetDrawing == null)
+                drawingsPart.WorksheetDrawing = new Xdr.WorksheetDrawing();
+
+            var worksheetDrawing = drawingsPart.WorksheetDrawing;
+
+            // Add namespaces
+            if (!worksheetDrawing.NamespaceDeclarations.Any(nd => nd.Value.Equals("http://schemas.openxmlformats.org/drawingml/2006/main")))
+                worksheetDrawing.AddNamespaceDeclaration("a", "http://schemas.openxmlformats.org/drawingml/2006/main");
+
+            if (!worksheetDrawing.NamespaceDeclarations.Any(nd => nd.Value.Equals("http://schemas.openxmlformats.org/officeDocument/2006/relationships")))
+                worksheetDrawing.AddNamespaceDeclaration("r", "http://schemas.openxmlformats.org/officeDocument/2006/relationships");
+
+
+            var nvps = worksheetDrawing.Descendants<Xdr.NonVisualDrawingProperties>();
+            var nvpId = nvps.Any() ?
+                (UInt32Value)worksheetDrawing.Descendants<Xdr.NonVisualDrawingProperties>().Max(p => p.Id.Value) + 1 :
+                1U;
+
+            var existingAnchor = drawingsPart.WorksheetDrawing.Where(wsdr => wsdr.Descendants<Xdr.NonVisualDrawingProperties>().Any(x => x?.Id?.Value == (uint)xlGroupShape.Id)).FirstOrDefault();
+            var wb = xlGroupShape.Worksheet.Workbook;
+
+            var existingNvGrpSpPr = existingAnchor?.Descendants<Xdr.NonVisualGroupShapeProperties>().FirstOrDefault();
+            var groupShape = new Xdr.GroupShape();
+            var nvGrpSpPr = existingNvGrpSpPr?.Clone() ?? new Xdr.NonVisualGroupShapeProperties
+            {
+                NonVisualDrawingProperties = new Xdr.NonVisualDrawingProperties
+                {
+                    Id = nvpId,
+                    Name = xlGroupShape.Name,
+                }
+            };
+
+            var existingGrpSpPr = existingAnchor?.Descendants<Xdr.GroupShapeProperties>().FirstOrDefault();
+            var grpSpPr = existingGrpSpPr?.Clone() ?? new Xdr.GroupShapeProperties
+            {
+                TransformGroup = new TransformGroup
+                {
+                    Offset = new Offset
+                    {
+                        X = ConvertToEnglishMetricUnits(xlGroupShape.Left, wb.DpiX),
+                        Y = ConvertToEnglishMetricUnits(xlGroupShape.Top, wb.DpiY),
+                    },
+                    Extents = new Extents
+                    {
+                        Cx = ConvertToEnglishMetricUnits(xlGroupShape.Width, wb.DpiX),
+                        Cy = ConvertToEnglishMetricUnits(xlGroupShape.Height, wb.DpiY),
+                    },
+                    ChildOffset = new ChildOffset
+                    {
+                        X = ConvertToEnglishMetricUnits(xlGroupShape.ChildLeft, wb.DpiX),
+                        Y = ConvertToEnglishMetricUnits(xlGroupShape.ChildTop, wb.DpiY),
+                    },
+                    ChildExtents = new ChildExtents
+                    {
+                        Cx = ConvertToEnglishMetricUnits(xlGroupShape.ChildWidth, wb.DpiX),
+                        Cy = ConvertToEnglishMetricUnits(xlGroupShape.ChildHeight, wb.DpiY),
+                    }
+                }
+            };
+            groupShape.AppendChild(nvGrpSpPr as Xdr.NonVisualGroupShapeProperties);
+            groupShape.AppendChild(grpSpPr as Xdr.GroupShapeProperties);
+
+            foreach(var xlPicture in xlGroupShape.Pictures)
+            {
+                var pic = xlPicture as XLPicture;
+                /////////
+                // Overwrite actual image binary data
+                ImagePart imagePart;
+                if (drawingsPart.HasPartWithId(pic.RelId))
+                    imagePart = drawingsPart.GetPartById(pic.RelId) as ImagePart;
+                else
+                {
+                    pic.RelId = context.RelIdGenerator.GetNext(RelType.Workbook);
+                    imagePart = drawingsPart.AddImagePart(pic.Format.ToOpenXml(), pic.RelId);
+                }
+
+                using (var stream = new MemoryStream())
+                {
+                    pic.ImageStream.Position = 0;
+                    pic.ImageStream.CopyTo(stream);
+                    stream.Seek(0, SeekOrigin.Begin);
+                    imagePart.FeedData(stream);
+                }
+
+                var existingPic = existingAnchor?.Descendants<Xdr.Picture>()?.Where(x => x.Descendants<Xdr.NonVisualDrawingProperties>().Any(x => x.Id == pic.Id))?.FirstOrDefault();
+                var existingNvPicPr = existingPic?.Descendants<Xdr.NonVisualPictureProperties>()?.FirstOrDefault();
+                var nvPicPr = existingNvPicPr?.Clone() as Xdr.NonVisualPictureProperties ??
+                    new Xdr.NonVisualPictureProperties(
+                                    new Xdr.NonVisualDrawingProperties { Id = ++nvpId, Name = pic.Name },
+                                    new Xdr.NonVisualPictureDrawingProperties(new PictureLocks { NoChangeAspect = true })
+                                );
+
+                var existingBlipFill = existingPic?.Descendants<Xdr.BlipFill>()?.FirstOrDefault();
+                var blipFill = existingBlipFill?.Clone() as Xdr.BlipFill ?? new Xdr.BlipFill(
+                                    new Blip { Embed = drawingsPart.GetIdOfPart(imagePart), CompressionState = BlipCompressionValues.Print },
+                                    new Stretch(new FillRectangle())
+                                );
+
+                var extentsCx = ConvertToEnglishMetricUnits(pic.Width, wb.DpiX);
+                var extentsCy = ConvertToEnglishMetricUnits(pic.Height, wb.DpiY);
+                var existingSpPr = existingPic?.Descendants<Xdr.ShapeProperties>()?.FirstOrDefault();
+                var spPr = existingSpPr?.Clone() as Xdr.ShapeProperties ??
+                                    new Xdr.ShapeProperties(
+                                        new Transform2D(
+                                            new Offset { X = 0, Y = 0 },
+                                            new Extents { Cx = extentsCx, Cy = extentsCy }
+                                        ),
+                                        new PresetGeometry { Preset = ShapeTypeValues.Rectangle }
+                                    );
+
+                var picture = new Xdr.Picture(
+                    nvPicPr,
+                    blipFill,
+                    spPr);
+
+                groupShape.AppendChild(picture);
+            }
+
+            foreach(var xlShape in xlGroupShape.Shapes)
+            {
+                var existingShape = existingAnchor?.Descendants<Xdr.Shape>()?.Where(x => x.Descendants<Xdr.NonVisualDrawingProperties>().Any(x => x.Id == xlShape.Id))?.FirstOrDefault();
+                var existingNvSpPr = existingShape?.Descendants<Xdr.NonVisualShapeProperties>()?.FirstOrDefault();
+                var nvSpPr = (Xdr.NonVisualShapeProperties)existingNvSpPr?.Clone() ?? new Xdr.NonVisualShapeProperties(
+                    new Xdr.NonVisualDrawingProperties { Id = ++nvpId, Name = xlShape.Name, }
+                    );
+
+                var x = ConvertToEnglishMetricUnits(xlShape.Left, wb.DpiX);
+                var y = ConvertToEnglishMetricUnits(xlShape.Top, wb.DpiY);
+                var extentsCx = ConvertToEnglishMetricUnits(xlShape.Width, wb.DpiX);
+                var extentsCy = ConvertToEnglishMetricUnits(xlShape.Height, wb.DpiY);
+                var existingSpPr = existingShape?.Descendants<Xdr.ShapeProperties>()?.FirstOrDefault();
+                var spPr = (Xdr.ShapeProperties)existingSpPr?.Clone() ?? new Xdr.ShapeProperties(
+                                        new Transform2D(
+                                            new Offset { X = x, Y = y },
+                                            new Extents { Cx = extentsCx, Cy = extentsCy }
+                                        ));
+
+                var existingStyle = existingShape?.Descendants<Xdr.ShapeStyle>()?.FirstOrDefault();
+                var style = (Xdr.ShapeStyle)existingStyle?.Clone();
+                var existingTxBody = existingShape?.Descendants<Xdr.TextBody>()?.FirstOrDefault();
+                var txBody = (Xdr.TextBody)existingTxBody?.Clone();
+
+                var shape = new Xdr.Shape(nvSpPr, spPr, style, txBody);
+                groupShape.AppendChild(shape);
+            }
+
+            OpenXmlElement anchor = null;
+            if (xlGroupShape.Placement is XLPicturePlacement.MoveAndSize)
+            {
+                var moveAndSizeFromMarker = group.Markers[Drawings.XLMarkerPosition.TopLeft];
+                if (moveAndSizeFromMarker == null) moveAndSizeFromMarker = new Drawings.XLMarker(xlGroupShape.Worksheet.Cell("A1"));
+                var fMark = new Xdr.FromMarker
+                {
+                    ColumnId = new Xdr.ColumnId((moveAndSizeFromMarker.ColumnNumber - 1).ToInvariantString()),
+                    RowId = new Xdr.RowId((moveAndSizeFromMarker.RowNumber - 1).ToInvariantString()),
+                    ColumnOffset = new Xdr.ColumnOffset(ConvertToEnglishMetricUnits(moveAndSizeFromMarker.Offset.X, wb.DpiX).ToInvariantString()),
+                    RowOffset = new Xdr.RowOffset(ConvertToEnglishMetricUnits(moveAndSizeFromMarker.Offset.Y, wb.DpiY).ToInvariantString())
+                };
+
+                var moveAndSizeToMarker = group.Markers[Drawings.XLMarkerPosition.BottomRight];
+                if (moveAndSizeToMarker == null) moveAndSizeToMarker = new Drawings.XLMarker(xlGroupShape.Worksheet.Cell("A1"), new System.Drawing.Point(xlGroupShape.Width, xlGroupShape.Height));
+                var tMark = new Xdr.ToMarker
+                {
+                    ColumnId = new Xdr.ColumnId((moveAndSizeToMarker.ColumnNumber - 1).ToInvariantString()),
+                    RowId = new Xdr.RowId((moveAndSizeToMarker.RowNumber - 1).ToInvariantString()),
+                    ColumnOffset = new Xdr.ColumnOffset(ConvertToEnglishMetricUnits(moveAndSizeToMarker.Offset.X, wb.DpiX).ToInvariantString()),
+                    RowOffset = new Xdr.RowOffset(ConvertToEnglishMetricUnits(moveAndSizeToMarker.Offset.Y, wb.DpiY).ToInvariantString())
+                };
+
+                var twoCellAnchor = new Xdr.TwoCellAnchor(
+                        fMark,
+                        tMark                        
+                    );
+                anchor = twoCellAnchor;
+            }
+
+            anchor.AppendChild(groupShape);
+            anchor.AppendChild(new Xdr.ClientData());
+
+            AttachAnchor(anchor, existingAnchor);
 
             void AttachAnchor(OpenXmlElement pictureAnchor, OpenXmlElement existingAnchor)
             {

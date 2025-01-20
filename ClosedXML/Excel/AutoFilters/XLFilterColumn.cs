@@ -143,6 +143,7 @@ namespace ClosedXML.Excel
         /// Basically average for dynamic filters. Value is refreshed during filter reapply.
         /// </summary>
         public Double DynamicValue { get; set; } = double.NaN;
+        public bool? ShowButton { get; set; }
 
         #endregion IXLFilterColumn Members
 
