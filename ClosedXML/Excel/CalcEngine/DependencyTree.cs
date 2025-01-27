@@ -67,6 +67,11 @@ namespace ClosedXML.Excel.CalcEngine
                 {
                     var formula = enumerator.Current;
                     var point = enumerator.Point;
+
+                    //If formula is null, ignore
+                    if(string.IsNullOrEmpty(formula.A1))
+                        continue;
+
                     if (formula.Type == FormulaType.Normal)
                     {
                         var bookArea = new XLBookArea(sheet.Name, new XLSheetRange(point, point));
