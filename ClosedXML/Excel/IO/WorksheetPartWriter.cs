@@ -2452,7 +2452,8 @@ namespace ClosedXML.Excel.IO
 
                 if (xlCell.HasFormula)
                 {
-                    String dataType = null;
+                    //Fix data type bug
+                    String dataType = FormulaDataType[(int)xlCell.DataType];
                     if (options.EvaluateFormulasBeforeSaving)
                     {
                         try
@@ -2523,7 +2524,10 @@ namespace ClosedXML.Excel.IO
                         xml.WriteEndElement(); // f
                     }
 
-                    if (options.EvaluateFormulasBeforeSaving && xlCell.CachedValue.Type != XLDataType.Blank && !xlCell.NeedsRecalculation)
+                    //if (options.EvaluateFormulasBeforeSaving &&
+                    //Write cached value
+                    if (xlCell.CachedValue.Type != XLDataType.Blank &&
+                        !xlCell.NeedsRecalculation)
                     {
                         WriteCellValue(xml, xlCell, context);
                     }
