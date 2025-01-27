@@ -805,7 +805,7 @@ namespace ClosedXML.Excel
                     ms.Position = 0;
                     using var reader = new StreamReader(ms);
                     var content = reader.ReadToEnd();
-                    content = content.Replace("<br>", "<br/>");
+                    content = content.Replace("<br></br>", "<br/>").Replace("<br>", "<br/>");
                     using var fixedMs = new MemoryStream(Encoding.UTF8.GetBytes(content));
 
                     var xdoc = XDocumentExtensions.Load(fixedMs);
