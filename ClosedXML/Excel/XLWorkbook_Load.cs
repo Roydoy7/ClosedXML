@@ -1357,7 +1357,7 @@ namespace ClosedXML.Excel
             // when value is missing. Formula can be null in some cases, e.g. slave cells of array formula.
             if (formula is not null && !cellHasValue)
             {
-                formula.IsDirty = true;
+                formula.MakeDirty(true);
             }
 
             // Inline text is dealt separately, because it is in a separate element.

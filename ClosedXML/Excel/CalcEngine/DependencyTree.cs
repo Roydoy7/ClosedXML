@@ -305,7 +305,7 @@ namespace ClosedXML.Excel.CalcEngine
 
             internal bool IsDirty => Formula.IsDirty;
 
-            internal bool MarkDirty() => Formula.IsDirty = true;
+            internal void MarkDirty() => Formula.MakeDirty(true);
         }
 
         /// <summary>

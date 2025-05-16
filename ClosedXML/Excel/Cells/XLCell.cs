@@ -501,7 +501,7 @@ namespace ClosedXML.Excel
                 return;
             }
 
-            Formula.IsDirty = true;
+            Formula.MakeDirty(true);
         }
 
         /// <summary>
@@ -748,7 +748,13 @@ namespace ClosedXML.Excel
                     Formula = null;
                 }
 
-                InvalidateFormula();
+                if (SliceCellValue.TryGetText(out var val))
+                {
+                    if (string.IsNullOrEmpty(val))
+                    {
+                        InvalidateFormula();
+                    }
+                }
             }
         }
 

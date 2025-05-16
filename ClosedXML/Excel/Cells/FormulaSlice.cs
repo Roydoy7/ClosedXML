@@ -140,7 +140,7 @@ namespace ClosedXML.Excel
             using var enumerator = GetForwardEnumerator(range);
             while (enumerator.MoveNext())
             {
-                enumerator.Current.IsDirty = true;
+                enumerator.Current.MakeDirty(true);
             }
         }
     }

@@ -1,6 +1,7 @@
 using System;
 using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
+using System.Linq;
 using ClosedXML.Parser;
 
 namespace ClosedXML.Excel.CalcEngine
@@ -162,12 +163,13 @@ namespace ClosedXML.Excel.CalcEngine
                     return true;
                 }
 
-                if (!table.FieldNames.TryGetValue(column, out var field))
+                //if (!table.FieldNames.TryGetValue(column, out var field))
+                if (!table.FieldNames.Values.Any(f => f.Name == column))
                 {
                     columnNo = default;
                     return false;
                 }
-
+                var field = table.FieldNames.Values.First(f => f.Name == column);
                 columnNo = field.Index + table.Area.LeftColumn;
                 return true;
             }

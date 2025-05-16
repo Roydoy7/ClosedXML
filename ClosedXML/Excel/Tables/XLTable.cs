@@ -33,20 +33,36 @@ namespace ClosedXML.Excel
         }
 
         private IXLRangeAddress _lastRangeAddress;
-        private Dictionary<String, IXLTableField> _fieldNames = null;
+        //private Dictionary<String, IXLTableField> _fieldNames = null;
+        private Dictionary<int, IXLTableField> _fieldNameDict = null;
 
-        public Dictionary<String, IXLTableField> FieldNames
+        //public Dictionary<String, IXLTableField> FieldNames
+        //{
+        //    get
+        //    {
+        //        if (_fieldNames != null && _lastRangeAddress != null && _lastRangeAddress.Equals(RangeAddress))
+        //            return _fieldNames;
+
+        //        _lastRangeAddress = RangeAddress;
+
+        //        RescanFieldNames();
+
+        //        return _fieldNames;
+        //    }
+        //}
+
+        public Dictionary<int, IXLTableField> FieldNames
         {
             get
             {
-                if (_fieldNames != null && _lastRangeAddress != null && _lastRangeAddress.Equals(RangeAddress))
-                    return _fieldNames;
+                if (_fieldNameDict != null && _lastRangeAddress != null && _lastRangeAddress.Equals(RangeAddress))
+                    return _fieldNameDict;
 
                 _lastRangeAddress = RangeAddress;
 
                 RescanFieldNames();
 
-                return _fieldNames;
+                return _fieldNameDict;
             }
         }
 
@@ -59,8 +75,8 @@ namespace ClosedXML.Excel
         {
             if (ShowHeaderRow)
             {
-                var oldFieldNames = _fieldNames ?? CreateFieldNames();
-                _fieldNames = CreateFieldNames();
+                var oldFieldNames = _fieldNameDict ?? CreateFieldNames();
+                _fieldNameDict = CreateFieldNames();
                 var headersRow = HeadersRow(false);
                 Int32 cellPos = 0;
                 foreach (XLCell cell in headersRow.Cells())
@@ -68,10 +84,10 @@ namespace ClosedXML.Excel
                     var cellValue = cell.CachedValue;
                     var name = cellValue.ToString(CultureInfo.CurrentCulture);
 
-                    if (oldFieldNames.TryGetValue(name, out IXLTableField tableField))// && tableField.Column.ColumnNumber() == cell.Address.ColumnNumber)
+                    if (oldFieldNames.TryGetValue(cellPos, out IXLTableField tableField))// && tableField.Column.ColumnNumber() == cell.Address.ColumnNumber)
                     {
                         (tableField as XLTableField).Index = cellPos;
-                        _fieldNames.Add(name, tableField);
+                        _fieldNameDict.Add(cellPos, tableField);
                         cellPos++;
                         continue;
                     }
@@ -81,10 +97,10 @@ namespace ClosedXML.Excel
                     {
                         name = GetUniqueName("Column", cellPos + 1, true);
                     }
-                    if (_fieldNames.ContainsKey(name))
+                    if (_fieldNameDict.ContainsKey(cellPos))
                         throw new ArgumentException("The header row contains more than one field name '" + name + "'.");
 
-                    _fieldNames.Add(name, new XLTableField(this, name) { Index = cellPos++ });
+                    _fieldNameDict.Add(cellPos, new XLTableField(this, name) { Index = cellPos++ });
 
                     // Field names are the source of the truth that is projected
                     // to the cells and field names can be only text. Fix the cell,
@@ -97,37 +113,116 @@ namespace ClosedXML.Excel
             }
             else
             {
+                _fieldNameDict = _fieldNameDict ?? CreateFieldNames();
                 Int32 colCount = ColumnCount();
                 for (Int32 i = 1; i <= colCount; i++)
                 {
-                    if (_fieldNames.Values.All(f => f.Index != i - 1))
+                    var name = "Column" + i;
+                    if (!_fieldNameDict.ContainsKey(i))
                     {
-                        var name = "Column" + i;
-
-                        _fieldNames.Add(name, new XLTableField(this, name) { Index = i - 1 });
+                        _fieldNameDict.Add(i, new XLTableField(this, name) { Index = i - 1 });
+                    }
+                    else
+                    {
+                        var field = _fieldNameDict[i];
+                        field.Name = name;
                     }
                 }
             }
         }
 
+        //private void RescanFieldNames()
+        //{
+        //    if (ShowHeaderRow)
+        //    {
+        //        var oldFieldNames = _fieldNames ?? CreateFieldNames();
+        //        _fieldNames = CreateFieldNames();
+        //        var headersRow = HeadersRow(false);
+        //        Int32 cellPos = 0;
+        //        foreach (XLCell cell in headersRow.Cells())
+        //        {
+        //            var cellValue = cell.CachedValue;
+        //            var name = cellValue.ToString(CultureInfo.CurrentCulture);
+
+        //            if (oldFieldNames.TryGetValue(name, out IXLTableField tableField))// && tableField.Column.ColumnNumber() == cell.Address.ColumnNumber)
+        //            {
+        //                (tableField as XLTableField).Index = cellPos;
+        //                _fieldNames.Add(name, tableField);
+        //                cellPos++;
+        //                continue;
+        //            }
+
+        //            // Be careful here. Fields names may actually be whitespace, but not empty
+        //            if (String.IsNullOrEmpty(name))
+        //            {
+        //                name = GetUniqueName("Column", cellPos + 1, true);
+        //            }
+        //            if (_fieldNames.ContainsKey(name))
+        //                throw new ArgumentException("The header row contains more than one field name '" + name + "'.");
+
+        //            _fieldNames.Add(name, new XLTableField(this, name) { Index = cellPos++ });
+
+        //            // Field names are the source of the truth that is projected
+        //            // to the cells and field names can be only text. Fix the cell,
+        //            // so cell fulfills its job of being dependent on the field name.
+        //            if (!cellValue.Equals(name))
+        //            {
+        //                cell.SetValue(name, false, false);
+        //            }
+        //        }
+        //    }
+        //    else
+        //    {
+        //        Int32 colCount = ColumnCount();
+        //        for (Int32 i = 1; i <= colCount; i++)
+        //        {
+        //            if (_fieldNames.Values.All(f => f.Index != i - 1))
+        //            {
+        //                var name = "Column" + i;
+
+        //                _fieldNames.Add(name, new XLTableField(this, name) { Index = i - 1 });
+        //            }
+        //        }
+        //    }
+        //}
+
+        //internal void AddFields(IEnumerable<String> fieldNames)
+        //{
+        //    //_fieldNames = CreateFieldNames();
+
+        //    Int32 cellPos = 0;
+        //    foreach (var name in fieldNames)
+        //    {
+        //        _fieldNames.Add(name, new XLTableField(this, name) { Index = cellPos++ });
+        //    }
+        //}
+
         internal void AddFields(IEnumerable<String> fieldNames)
         {
-            _fieldNames = CreateFieldNames();
+            _fieldNameDict = CreateFieldNames();
 
             Int32 cellPos = 0;
             foreach (var name in fieldNames)
             {
-                _fieldNames.Add(name, new XLTableField(this, name) { Index = cellPos++ });
+                _fieldNameDict.Add(cellPos, new XLTableField(this, name) { Index = cellPos++ });
             }
         }
 
-        internal void RenameField(String oldName, String newName)
-        {
-            if (!_fieldNames.TryGetValue(oldName, out IXLTableField field))
-                throw new ArgumentException("The field does not exist in this table", "oldName");
+        //internal void RenameField(String oldName, String newName)
+        //{
+        //    if (!_fieldNames.TryGetValue(oldName, out IXLTableField field))
+        //        throw new ArgumentException("The field does not exist in this table", "oldName");
 
-            _fieldNames.Remove(oldName);
-            _fieldNames.Add(newName, field);
+        //    _fieldNames.Remove(oldName);
+        //    _fieldNames.Add(newName, field);
+        //}
+
+        internal void RenameField(int index, String newName)
+        {
+            if (_fieldNameDict.ContainsKey(index))
+                _fieldNameDict.Remove(index);
+
+            _fieldNameDict.Add(index, new XLTableField (this, newName) { Index = index});
         }
 
         internal String RelId { get; set; }
@@ -213,7 +308,7 @@ namespace ClosedXML.Excel
                 _name = value;
 
                 // Some totals row formula depend on the table name. Update them.
-                if (_fieldNames?.Any() ?? false)
+                if (_fieldNameDict?.Any() ?? false)
                     this.Fields.ForEach(f => (f as XLTableField).UpdateTableFieldTotalsRowFormula());
 
                 if (!String.IsNullOrWhiteSpace(oldname) && !String.Equals(oldname, _name, StringComparison.OrdinalIgnoreCase))
@@ -354,7 +449,7 @@ namespace ClosedXML.Excel
                     var header = c.GetString();
                     _uniqueNames.Add(header);
 
-                    if (!existingHeaders.Contains(header))
+                    if (!_fieldNameDict.Values.Any(x => x.Name == header))
                         newHeaders.Add(header);
 
                     co++;
@@ -378,7 +473,7 @@ namespace ClosedXML.Excel
 
             if (this.ShowTotalsRow)
             {
-                foreach (var f in this._fieldNames.Values)
+                foreach (var f in this._fieldNameDict.Values)
                 {
                     var fieldColumn = f.Index + 1;
                     var c = this.TotalsRow().Cell(fieldColumn);
@@ -390,7 +485,7 @@ namespace ClosedXML.Excel
 
                 if (totalsRowChanged != 0)
                 {
-                    foreach (var f in this._fieldNames.Values.Cast<XLTableField>())
+                    foreach (var f in this._fieldNameDict.Values.Cast<XLTableField>())
                     {
                         f.UpdateTableFieldTotalsRowFormula();
                         var fieldColumn = f.Index + 1;
@@ -411,6 +506,95 @@ namespace ClosedXML.Excel
 
             return this;
         }
+
+        //public IXLTable Resize(IXLRange range)
+        //{
+        //    if (!this.ShowHeaderRow)
+        //        throw new NotImplementedException("Resizing of tables with no headers not supported yet.");
+
+        //    if (this.Worksheet != range.Worksheet)
+        //        throw new InvalidOperationException("You cannot resize a table to a range on a different sheet.");
+
+        //    var totalsRowChanged = this.ShowTotalsRow ? range.LastRow().RowNumber() - this.TotalsRow().RowNumber() : 0;
+        //    var oldTotalsRowNumber = this.ShowTotalsRow ? this.TotalsRow().RowNumber() : -1;
+
+        //    var existingHeaders = this.FieldNames.Keys;
+        //    var newHeaders = new HashSet<string>();
+
+        //    // Force evaluation of f.Column field
+        //    var tempArray = this.Fields.Select(f => f.Column).ToArray();
+
+        //    var firstRow = range.Row(1);
+        //    if (!firstRow.FirstCell().Address.Equals(this.HeadersRow().FirstCell().Address)
+        //        || !firstRow.LastCell().Address.Equals(this.HeadersRow().LastCell().Address))
+        //    {
+        //        _uniqueNames.Clear();
+        //        var co = 1;
+        //        foreach (var c in firstRow.Cells())
+        //        {
+        //            if (c.IsEmpty(XLCellsUsedOptions.Contents))
+        //                c.Value = GetUniqueName("Column", co, true);
+
+        //            var header = c.GetString();
+        //            _uniqueNames.Add(header);
+
+        //            if (!existingHeaders.Contains(header))
+        //                newHeaders.Add(header);
+
+        //            co++;
+        //        }
+        //    }
+
+        //    if (totalsRowChanged < 0)
+        //    {
+        //        range.Rows(r => r.RowNumber().Equals(this.TotalsRow().RowNumber() + totalsRowChanged)).Single().InsertRowsAbove(1);
+        //        range = Worksheet.Range(range.FirstCell(), range.LastCell().CellAbove());
+        //        oldTotalsRowNumber++;
+        //    }
+        //    else if (totalsRowChanged > 0)
+        //    {
+        //        this.TotalsRow().RowBelow(totalsRowChanged + 1).InsertRowsAbove(1);
+        //        this.TotalsRow().AsRange().Delete(XLShiftDeletedCells.ShiftCellsUp);
+        //    }
+
+        //    this.RangeAddress = (XLRangeAddress)range.RangeAddress;
+        //    RescanFieldNames();
+
+        //    if (this.ShowTotalsRow)
+        //    {
+        //        foreach (var f in this._fieldNames.Values)
+        //        {
+        //            var fieldColumn = f.Index + 1;
+        //            var c = this.TotalsRow().Cell(fieldColumn);
+        //            if (!c.IsEmpty() && newHeaders.Contains(f.Name))
+        //            {
+        //                f.TotalsRowLabel = c.GetFormattedString();
+        //            }
+        //        }
+
+        //        if (totalsRowChanged != 0)
+        //        {
+        //            foreach (var f in this._fieldNames.Values.Cast<XLTableField>())
+        //            {
+        //                f.UpdateTableFieldTotalsRowFormula();
+        //                var fieldColumn = f.Index + 1;
+        //                var c = this.TotalsRow().Cell(fieldColumn);
+        //                if (!String.IsNullOrWhiteSpace(f.TotalsRowLabel))
+        //                {
+        //                    //Remove previous row's label
+        //                    var oldTotalsCell = Worksheet.Cell(oldTotalsRowNumber, f.Column.ColumnNumber());
+        //                    if (oldTotalsCell.Value.Equals(f.TotalsRowLabel))
+        //                        oldTotalsCell.Value = Blank.Value;
+        //                }
+
+        //                if (!string.IsNullOrEmpty(f.TotalsRowLabel))
+        //                    c.SetValue(f.TotalsRowLabel);
+        //            }
+        //        }
+        //    }
+
+        //    return this;
+        //}
 
         public IXLTable SetEmphasizeFirstColumn()
         {
@@ -561,9 +745,14 @@ namespace ClosedXML.Excel
             }
         }
 
-        private static Dictionary<string, IXLTableField> CreateFieldNames()
+        //private static Dictionary<string, IXLTableField> CreateFieldNames()
+        //{
+        //    return new Dictionary<string, IXLTableField>(StringComparer.CurrentCultureIgnoreCase);
+        //}
+
+        private static Dictionary<int, IXLTableField> CreateFieldNames()
         {
-            return new Dictionary<string, IXLTableField>(StringComparer.CurrentCultureIgnoreCase);
+            return new Dictionary<int, IXLTableField>();
         }
 
         private String GetUniqueName(String originalName, Int32 initialOffset, Boolean enforceOffset)
@@ -589,11 +778,26 @@ namespace ClosedXML.Excel
             // The entry in the table definition will contain \r\n
             // but the shared string value of the actual cell will contain only \n
             name = name.Replace("\r\n", "\n");
-            if (FieldNames.TryGetValue(name, out IXLTableField tableField))
+            if (FieldNames.Values.Any(f => f.Name.Equals(name, StringComparison.OrdinalIgnoreCase)))
+            {
+                var tableField = FieldNames.Values.FirstOrDefault(f => f.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
                 return tableField.Index;
+            }
 
             throw new ArgumentOutOfRangeException("The header row doesn't contain field name '" + name + "'.");
         }
+
+        //public Int32 GetFieldIndex(String name)
+        //{
+        //    // There is a discrepancy in the way headers with line breaks are stored.
+        //    // The entry in the table definition will contain \r\n
+        //    // but the shared string value of the actual cell will contain only \n
+        //    name = name.Replace("\r\n", "\n");
+        //    if (FieldNames.TryGetValue(name, out IXLTableField tableField))
+        //        return tableField.Index;
+
+        //    throw new ArgumentOutOfRangeException("The header row doesn't contain field name '" + name + "'.");
+        //}
 
         internal Boolean _showHeaderRow;
 

@@ -41,7 +41,7 @@ namespace ClosedXML.Excel
         /// Is this formula dirty, i.e. is it potentially out of date due to changes
         /// to precedent cells?
         /// </summary>
-        internal bool IsDirty { get; set; }
+        internal bool IsDirty { get; private set; }
 
         /// <summary>
         /// Formula in A1 notation. Doesn't start with <c>=</c> sign.
@@ -246,6 +246,11 @@ namespace ClosedXML.Excel
             };
         }
 
+        internal void MakeDirty(bool dirty)
+        {
+            IsDirty = dirty;
+        }
+
         /// <summary>
         /// An enum to efficiently store various flags for formulas (bool takes up 1-4 bytes due to alignment).
         /// Note that each type of formula uses different flags.
@@ -311,7 +316,7 @@ namespace ClosedXML.Excel
             if (res != a1)
             {
                 A1 = res;
-                IsDirty = true;
+                MakeDirty(true);
             }
         }
 
@@ -324,7 +329,7 @@ namespace ClosedXML.Excel
             var originR1C1 = FormulaConverter.ToR1C1(A1, origin.Row, origin.Column);
             var targetA1 = FormulaConverter.ToA1(originR1C1, destination.Row, destination.Column);
             var targetFormula = NormalA1(targetA1);
-            targetFormula.IsDirty = true;
+            targetFormula.MakeDirty(true);
             return targetFormula;
         }
     }

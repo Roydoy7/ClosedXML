@@ -1486,6 +1486,8 @@ namespace ClosedXML.Excel
                     definedName.SheetReferencesList.Select(r => XLCell.ShiftFormulaRows(r, this, range, rowsShifted)).Where(
                         newReference => newReference.Length > 0).ToList();
                 var unionFormula = string.Join(",", newRangeList);
+                if (string.IsNullOrEmpty(unionFormula))
+                    continue;
                 definedName.SetRefersTo(unionFormula);
             }
         }

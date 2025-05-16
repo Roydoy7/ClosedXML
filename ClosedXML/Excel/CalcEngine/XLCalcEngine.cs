@@ -120,11 +120,11 @@ namespace ClosedXML.Excel.CalcEngine
             _dependencyTree = null;
             _chain = null;
 
-            // Mark everything as dirty, because there can be stale values
-            foreach (var sheet in sheets)
-            {
-                sheet.Internals.CellsCollection.FormulaSlice.MarkDirty(XLSheetRange.Full);
-            }
+            //// Mark everything as dirty, because there can be stale values
+            //foreach (var sheet in sheets)
+            //{
+            //    sheet.Internals.CellsCollection.FormulaSlice.MarkDirty(XLSheetRange.Full);
+            //}
         }
 
         internal void MarkDirty(XLWorksheet sheet, XLSheetPoint point)
@@ -199,7 +199,8 @@ namespace ClosedXML.Excel.CalcEngine
                     {
                         ApplyFormula(cellFormula, current.Point, sheetInfo.Sheet, sheetInfo.ValueSlice,
                             recalculateSheetId);
-                        cellFormula.IsDirty = false;
+                        cellFormula.MakeDirty(false);
+                        //cellFormula.IsDirty = false;
 
                         // Break out of the inner loop, a dirty cell has been
                         // calculated and thus chain can move ahead.
@@ -220,7 +221,9 @@ namespace ClosedXML.Excel.CalcEngine
 
         private void ApplyFormula(XLCellFormula formula, XLSheetPoint appliedPoint, XLWorksheet sheet, ValueSlice valueSlice, uint? recalculateSheetId)
         {
-            var formulaText = formula.A1;
+            var formulaText = formula.A1
+                //Remove possible newlines from formula
+                .Replace("\n", string.Empty);
             if (formula.Type == FormulaType.Normal)
             {
                 var single = EvaluateFormula(

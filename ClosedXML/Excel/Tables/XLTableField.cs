@@ -88,7 +88,8 @@ namespace ClosedXML.Excel
                 if (table.ShowHeaderRow)
                     ((XLCell)table.HeadersRow(false).Cell(Index + 1)).SetValue(value, setTableHeader: false, checkMergedRanges: true);
 
-                table.RenameField(name, value);
+                //table.RenameField(name, value);
+                table.RenameField(index, value);
                 name = value;
             }
         }
@@ -161,8 +162,19 @@ namespace ClosedXML.Excel
                 table.AsRange().ColumnQuick(this.Index + 1).Delete();
             }
 
+            var greaterFields = fields.Where(f => f.Index > this.Index).ToArray();
+            foreach(var field in greaterFields)
+            {
+                table.FieldNames.Remove(field.Index);
+                field.Index--;
+            }
+            foreach (var field in greaterFields)
+            {
+                table.FieldNames.Add(field.Index, field);
+            }
             fields.Where(f => f.Index > this.Index).ForEach(f => f.Index--);
-            table.FieldNames.Remove(this.Name);
+            //table.FieldNames.Remove(this.Name);
+            table.FieldNames.Remove(index);
         }
 
         public bool IsConsistentDataType()

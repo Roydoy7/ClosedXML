@@ -55,7 +55,8 @@ namespace ClosedXML.Excel
                 if (!Cell(1).Value.TryGetText(out var firstCellValue))
                     throw new InvalidOperationException("Top cell doesn't contain a text.");
 
-                if (!table.FieldNames.ContainsKey(firstCellValue))
+                //if (!table.FieldNames.ContainsKey(firstCellValue))
+                if (!table.FieldNames.Values.Any(x => x.Name.Equals(firstCellValue, StringComparison.OrdinalIgnoreCase)))
                     throw new InvalidOperationException($"Field {firstCellValue} not found.");
 
                 var field = table.Fields.Cast<XLTableField>().Single(f => f.Name == firstCellValue);
